@@ -14,7 +14,7 @@ const ArticleSchema = new mongoose.Schema({
   },
   date: {
     type: Date,
-    default: Date.now,  // Remove () here - should be Date.now not Date.now()
+    default: Date.now,  
   },
   tags: {
     type: [String],
@@ -23,7 +23,6 @@ const ArticleSchema = new mongoose.Schema({
   thumbnail: {
     type: String,
   },
-  // Add these fields to match your router
   status: {
     type: String,
     enum: ['draft', 'published', 'archived'],
@@ -41,6 +40,8 @@ const ArticleSchema = new mongoose.Schema({
     sparse: true 
   }
 });
+
+ArticleSchema.index({ date: -1 });
 
 const Article = mongoose.model("Article", ArticleSchema);
 export default Article

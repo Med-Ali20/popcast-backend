@@ -1,23 +1,45 @@
 import express from "express";
 import Podcast from "../models/Podcast";
-import { uploadAudio, uploadVideo, deleteFileFromS3 } from "../services/file-upload";
+import {
+  uploadAudio,
+  uploadVideo,
+  deleteFileFromS3,
+  uploadPodcast,
+} from "../services/file-upload";
 import multer from "multer";
+import auth from "../middleware/auth";
 
 const router = express.Router();
 
 // Upload podcast with audio and/or video files to S3
 router.post(
   "/",
-  uploadAudio.fields([
+  auth,
+  uploadPodcast.fields([
     { name: "audio", maxCount: 1 },
     { name: "video", maxCount: 1 },
+    { name: "thumbnail", maxCount: 1 },
   ]),
   async (req, res) => {
     try {
-      const { title, description, category, tags, youtube, spotify, anghami, appleMusic, thumbnailUrl } = req.body;
-      const files = req.files as { [fieldname: string]: Express.MulterS3.File[] };
+      const {
+        title,
+        description,
+        category,
+        tags,
+        youtube,
+        spotify,
+        anghami,
+        appleMusic,
+      } = req.body;
+      
+      const files = req.files as {
+        [fieldname: string]: Express.MulterS3.File[];
+      };
+      
       const audioFile = files?.audio?.[0];
       const videoFile = files?.video?.[0];
+      const thumbnailFile = files?.thumbnail?.[0];
 
       if (!audioFile && !videoFile) {
         return res
@@ -28,6 +50,7 @@ router.post(
       // S3 files have a 'location' property with the public URL
       const audioUrl = audioFile ? audioFile.location : null;
       const videoUrl = videoFile ? videoFile.location : null;
+      const thumbnailUrl = thumbnailFile ? thumbnailFile.location : null;
 
       const podcastData = {
         title,
@@ -49,54 +72,54 @@ router.post(
 
       res.status(201).json({
         message: "Podcast uploaded successfully!",
-        podcast
+        podcast,
       });
     } catch (error: any) {
-      console.error('Upload error:', error);
+      console.error("Upload error:", error);
       res.status(400).json({ error: error.message });
     }
   }
 );
 
 // Upload only audio file to S3
-router.post('/upload-audio', uploadAudio.single('audio'), async (req, res) => {
+router.post("/upload-audio", auth, uploadAudio.single("audio"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No audio file uploaded' });
+      return res.status(400).json({ error: "No audio file uploaded" });
     }
 
     const file = req.file as Express.MulterS3.File;
 
     res.json({
-      message: 'Audio uploaded successfully',
+      message: "Audio uploaded successfully",
       url: file.location,
       key: file.key,
-      size: file.size
+      size: file.size,
     });
   } catch (error: any) {
-    console.error('Audio upload error:', error);
-    res.status(500).json({ error: 'Failed to upload audio' });
+    console.error("Audio upload error:", error);
+    res.status(500).json({ error: "Failed to upload audio" });
   }
 });
 
 // Upload only video file to S3
-router.post('/upload-video', uploadVideo.single('video'), async (req, res) => {
+router.post("/upload-video", auth, uploadVideo.single("video"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No video file uploaded' });
+      return res.status(400).json({ error: "No video file uploaded" });
     }
 
     const file = req.file as Express.MulterS3.File;
 
     res.json({
-      message: 'Video uploaded successfully',
+      message: "Video uploaded successfully",
       url: file.location,
       key: file.key,
-      size: file.size
+      size: file.size,
     });
   } catch (error: any) {
-    console.error('Video upload error:', error);
-    res.status(500).json({ error: 'Failed to upload video' });
+    console.error("Video upload error:", error);
+    res.status(500).json({ error: "Failed to upload video" });
   }
 });
 
@@ -175,7 +198,7 @@ router.get("/", async (req, res) => {
 
 // Get single podcast by ID
 router.get("/:id", async (req, res) => {
-  console.log('Fetching podcast with ID:', req.params.id);
+  console.log("Fetching podcast with ID:", req.params.id);
   try {
     const { id } = req.params;
     const podcast = await Podcast.findById(id);
@@ -195,7 +218,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // PARTIAL UPDATE - Patch podcast by ID
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -215,7 +238,7 @@ router.patch("/:id", async (req, res) => {
 
     res.status(200).json({
       message: "Podcast updated successfully",
-      podcast: updatedPodcast
+      podcast: updatedPodcast,
     });
   } catch (error: any) {
     if (error.name === "CastError") {
@@ -229,7 +252,8 @@ router.patch("/:id", async (req, res) => {
 });
 
 // Delete podcast and remove files from S3
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
+  console.log('hi')
   try {
     const { id } = req.params;
 
@@ -243,14 +267,14 @@ router.delete("/:id", async (req, res) => {
     try {
       if (podcast.audioUrl) {
         await deleteFileFromS3(podcast.audioUrl);
-        console.log('Audio file deleted from S3:', podcast.audioUrl);
+        console.log("Audio file deleted from S3:", podcast.audioUrl);
       }
       if (podcast.videoUrl) {
         await deleteFileFromS3(podcast.videoUrl);
-        console.log('Video file deleted from S3:', podcast.videoUrl);
+        console.log("Video file deleted from S3:", podcast.videoUrl);
       }
     } catch (s3Error: any) {
-      console.error('Error deleting files from S3:', s3Error);
+      console.error("Error deleting files from S3:", s3Error);
       // Continue with database deletion even if S3 deletion fails
     }
 
@@ -270,21 +294,32 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Error handling middleware for multer errors
-router.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        error: 'File is too large. Max size is 500MB for video and 100MB for audio'
-      });
+router.use(
+  (
+    error: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          error:
+            "File is too large. Max size is 500MB for video and 100MB for audio",
+        });
+      }
+      return res.status(400).json({ error: error.message });
     }
-    return res.status(400).json({ error: error.message });
-  }
-  
-  if (error.message === 'Only audio files are allowed!' || error.message === 'Only video files are allowed!') {
-    return res.status(400).json({ error: error.message });
-  }
 
-  next(error);
-});
+    if (
+      error.message === "Only audio files are allowed!" ||
+      error.message === "Only video files are allowed!"
+    ) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    next(error);
+  }
+);
 
 export default router;

@@ -1,3 +1,4 @@
+// models/Podcast.ts
 import mongoose from "mongoose";
 import { IPodcast } from "../types";
 
@@ -34,9 +35,13 @@ const podcastSchema = new mongoose.Schema<IPodcast>({
     type: String,
   },
   category: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',  // Reference to Category model
   },
-}, {timestamps: true});
+}, { timestamps: true });
+
+// Index for efficient category filtering
+podcastSchema.index({ category: 1 });
 
 const Podcast = mongoose.model<IPodcast>("Podcast", podcastSchema);
 export default Podcast;

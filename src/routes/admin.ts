@@ -5,6 +5,29 @@ import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
+
+router.get("/", auth, async (req, res) => {
+  try {
+    const token = req.headers.authorization!.split(" ")[1];
+    const { isSuperAdmin } = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as {
+      id: string;
+      username: string;
+      isSuperAdmin: boolean;
+    };
+
+    if (!isSuperAdmin) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const admins = (await Admin.find({}, { password: 0 })).filter(admin => !admin.isSuperAdmin); 
+    return res.status(200).json(admins);
+  } catch (err) {
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.post("/register", auth, async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -28,7 +51,7 @@ router.post("/register", auth, async (req, res) => {
     }
     const newAdmin = new Admin({ username, password });
     await newAdmin.save();
-    return res.status(201).json({ message: "Admin registered successfully" });
+    return res.status(201).json({username: newAdmin.username, id: newAdmin._id});
   } catch (err) {
     return res.status(500).json({ message: "Server error" });
   }
@@ -54,7 +77,7 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET as string,
       { expiresIn: "4h" }
     );
-    return res.status(200).json({ token });
+    return res.status(200).json({ token, username: admin.username, isSuperAdmin: admin.isSuperAdmin, id: admin._id });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }

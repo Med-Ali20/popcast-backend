@@ -4,6 +4,9 @@ import cors from "cors";
 import podcastRouter from "./routes/podcast";
 import articleRouter from "./routes/article";
 import adminRouter from "./routes/admin";
+import categoryRouter from "./routes/category"
+import cron from 'node-cron'
+import Article from "./models/Article";
 
 require("dotenv").config();
 
@@ -15,6 +18,7 @@ app.use(express.json());
 app.use("/podcast", podcastRouter);
 app.use("/article", articleRouter);
 app.use("/admin", adminRouter);
+app.use("/category", categoryRouter);
 
 async function startServer() {
   try {
@@ -28,5 +32,26 @@ async function startServer() {
     process.exit(1);
   }
 }
+
+cron.schedule('* * * * *', async () => {
+  try {
+    const now = new Date();
+        
+    await Article.updateMany(
+      {
+        status: 'draft',
+        date: { $lte: now }
+      },
+      {
+        $set: { 
+          status: 'published',
+          date: now
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Cron job error:', error);
+  } 
+});
 
 startServer();

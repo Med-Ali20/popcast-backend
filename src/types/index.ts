@@ -1,4 +1,4 @@
-import { Document, HydratedDocument, Model } from "mongoose";
+import { Document, HydratedDocument, Model, Types } from "mongoose";
 
 export interface IPodcast {
   title: string;
@@ -9,7 +9,7 @@ export interface IPodcast {
   spotify?: string;
   anghami?: string;
   tags?: string[];
-  category?: string;
+  category?: Types.ObjectId;
   appleMusic: string;
   thumbnailUrl?: string;
 }
