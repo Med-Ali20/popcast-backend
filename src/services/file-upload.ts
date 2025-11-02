@@ -216,4 +216,40 @@ export const uploadArticle = multer({
   }
 });
 
+export const uploadArticleMedia = multer({
+  storage: multerS3({
+    s3: s3Client,
+    bucket: process.env.AWS_S3_BUCKET_NAME!,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const fileName = generateFileName(file.originalname);
+      let folder = 'other';
+      
+      if (file.mimetype.startsWith('image/')) {
+        folder = 'images';
+      } else if (file.mimetype.startsWith('video/')) {
+        folder = 'videos';
+      } else if (file.mimetype.startsWith('audio/')) {
+        folder = 'audio';
+      }
+      
+      cb(null, `articles/content/${folder}/${fileName}`);
+    }
+  }),
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/', 'video/', 'audio/'];
+    if (allowedTypes.some(type => file.mimetype.startsWith(type))) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images, videos, and audio files are allowed'));
+    }
+  }
+});
+
 export { s3Client, S3File };

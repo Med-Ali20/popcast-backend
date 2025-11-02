@@ -1,7 +1,7 @@
 import express from "express";
 import Article from "../models/Article";
 import auth from "../middleware/auth";
-import { uploadArticle } from "../services/file-upload";
+import { uploadArticleMedia, uploadArticle } from "../services/file-upload";
 
 const router = express.Router();
 
@@ -321,5 +321,28 @@ router.get("/stats/overview", auth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.post(
+  "/upload-media",
+  auth,
+  uploadArticleMedia.single("media"),
+  async (req, res) => {
+    try {
+      const file = req.file as Express.MulterS3.File;
+      
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      res.status(200).json({ 
+        url: file.location,
+        key: file.key,
+        type: file.mimetype
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
 
 export default router;
