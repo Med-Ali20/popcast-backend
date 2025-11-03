@@ -14,7 +14,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://3.70.229.133:3000, https://itspopcast.com'],
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://3.79.57.91:3000, https://itspopcast.com, https://www.itspopcast.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
