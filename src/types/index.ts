@@ -2,6 +2,7 @@ import { Document, HydratedDocument, Model, Types } from "mongoose";
 
 export interface IPodcast {
   title: string;
+  subTitle?: string;
   audioUrl: string;
   videoUrl: string;
   description?: string;

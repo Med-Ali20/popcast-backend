@@ -8,6 +8,10 @@ const ArticleSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+ subTitle: {
+    type: String,
+    trim: true
+  },
   content: {
     type: String,
     required: true,

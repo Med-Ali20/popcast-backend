@@ -7,6 +7,9 @@ const podcastSchema = new mongoose.Schema<IPodcast>({
     type: String,
     required: true,
   },
+  subTitle: {
+    type: String,
+  },
   audioUrl: {
     type: String,
   },
