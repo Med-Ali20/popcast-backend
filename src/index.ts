@@ -14,6 +14,20 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 3001;
 
+// Store blocked IPs in memory (or use Redis/database for persistence)
+const blockedIPs = new Set<string>();
+
+// Middleware to check if IP is blocked
+const blockMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const clientIP = req.ip || req.socket.remoteAddress || '';
+  
+  if (blockedIPs.has(clientIP)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  
+  next();
+};
+
 app.use(cors({
   origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://3.79.57.91:3000', 'https://itspopcast.com', 'https://www.itspopcast.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -22,37 +36,60 @@ app.use(cors({
 
 app.use(express.json());
 
-// General rate limiter for all routes
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: {
-    error: "Too many requests from this IP, please try again later."
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  // Skip rate limiting for certain IPs (optional)
-  // skip: (req) => {
-  //   const trustedIPs = ['127.0.0.1'];
-  //   return trustedIPs.includes(req.ip);
-  // }
+// Apply block middleware to all routes
+app.use(blockMiddleware);
+
+// Honeypot routes - hidden routes that should never be accessed by legitimate users
+const honeypotRoutes = [
+  '/admin/login',
+  '/wp-admin',
+  '/wp-login.php',
+  '/.env',
+  '/config.php',
+  '/phpmyadmin',
+  '/.git/config',
+  '/admin/config',
+  '/backup.sql',
+  '/database.sql'
+];
+
+honeypotRoutes.forEach(route => {
+  app.all(route, (req, res) => {
+    const clientIP = req.ip || req.socket.remoteAddress || '';
+    
+    // Add IP to blocked list
+    blockedIPs.add(clientIP);
+    
+    // Log the attempt
+    console.log(`[SECURITY ALERT] IP ${clientIP} accessed honeypot route: ${route} at ${new Date().toISOString()}`);
+    console.log(`Request details:`, {
+      method: req.method,
+      headers: req.headers,
+      userAgent: req.get('user-agent')
+    });
+    
+    // Optionally save to database for persistence
+    // await saveBlockedIP(clientIP, route);
+    
+    // Return a fake response to not reveal it's a honeypot
+    res.status(404).json({ error: "Not found" });
+  });
 });
 
-// Stricter rate limiter for write operations (POST, PUT, DELETE)
-const writeOperationsLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each IP to 30 write requests per windowMs
+// General rate limiter for all routes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
-    error: "Too many write requests, please try again later."
+    error: "Too many requests from this IP, please try again later."
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Very strict rate limiter for admin routes
 const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Limit each IP to 50 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 50,
   message: {
     error: "Too many admin requests, please try again later."
   },
@@ -60,15 +97,11 @@ const adminLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply general rate limiter to all routes
 app.use(generalLimiter);
 
-// Apply specific rate limiters to routes
 app.use("/podcast", podcastRouter);
 app.use("/article", articleRouter);
 app.use("/category", categoryRouter);
-
-// Apply stricter rate limiter to admin routes
 app.use("/admin", adminLimiter, adminRouter);
 
 async function startServer() {
