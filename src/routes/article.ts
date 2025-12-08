@@ -5,7 +5,43 @@ import { uploadArticleMedia, uploadArticle } from "../services/file-upload";
 
 const router = express.Router();
 
+const MAX_SEARCH_LENGTH = 100;
+const MAX_TAG_LENGTH = 50;
+const MAX_CATEGORY_LENGTH = 50;
+const MAX_AUTHOR_LENGTH = 100;
 
+// Validate and sanitize search input
+function validateSearchInput(input: string, maxLength: number): string {
+  if (!input) return "";
+
+  // Trim and limit length
+  let sanitized = input.trim().substring(0, maxLength);
+
+  // Remove potentially malicious characters
+  // Allow: letters, numbers, spaces, hyphens, underscores, and common punctuation
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\s\-_.,'!?@#]/g, "");
+
+  // Escape special regex characters that might remain
+  sanitized = sanitized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return sanitized;
+}
+
+// Validate tags array
+function validateTags(tagsString: string): string[] {
+  if (!tagsString) return [];
+
+  const tags = tagsString.split(",").map((tag) => tag.trim());
+
+  // Limit number of tags
+  const validTags = tags
+    .slice(0, 10) // Max 10 tags
+    .filter((tag) => tag.length > 0 && tag.length <= MAX_TAG_LENGTH)
+    .map((tag) => validateSearchInput(tag, MAX_TAG_LENGTH))
+    .filter((tag) => tag.length > 0);
+
+  return validTags;
+}
 
 router.post(
   "/",
@@ -37,25 +73,50 @@ router.post(
   }
 );
 
-// READ - Get all articles with pagination, search and filtering
 router.get("/", async (req, res) => {
-  console.log("fetching articles");
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100); // Max 100 items per page
     const skip = (page - 1) * limit;
 
-    const search = req.query.search as string;
-    const tags = req.query.tags as string;
-    const category = req.query.category as string;
+    // Validate and sanitize inputs
+    const search = validateSearchInput(
+      req.query.search as string,
+      MAX_SEARCH_LENGTH
+    );
+    const tagsString = req.query.tags as string;
+    const category = validateSearchInput(
+      req.query.category as string,
+      MAX_CATEGORY_LENGTH
+    );
     const status = req.query.status as string;
-    const author = req.query.author as string;
-    const sortBy = (req.query.sortBy as string) || "date"; // Changed to "date"
+    const author = validateSearchInput(
+      req.query.author as string,
+      MAX_AUTHOR_LENGTH
+    );
+    const sortBy = (req.query.sortBy as string) || "date";
     const sortOrder = (req.query.sortOrder as string) || "desc";
+
+    // Validate status against allowed values
+    const validStatuses = ["draft", "published", "archived"];
+    const validatedStatus = validStatuses.includes(status) ? status : "";
+
+    // Validate sortBy against allowed fields
+    const validSortFields = [
+      "date",
+      "title",
+      "publishDate",
+      "createdAt",
+      "updatedAt",
+    ];
+    const validatedSortBy = validSortFields.includes(sortBy) ? sortBy : "date";
+
+    // Validate sortOrder
+    const validatedSortOrder = sortOrder === "asc" ? "asc" : "desc";
 
     let query: any = {};
 
-    if (search) {
+    if (search && search.length > 0) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
         { content: { $regex: search, $options: "i" } },
@@ -63,25 +124,27 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    if (category) {
+    if (category && category.length > 0) {
       query.category = category;
     }
 
-    if (status) {
-      query.status = status;
+    if (validatedStatus) {
+      query.status = validatedStatus;
     }
 
-    if (author) {
+    if (author && author.length > 0) {
       query.author = { $regex: author, $options: "i" };
     }
 
-    if (tags) {
-      const tagList = tags.split(",").map((tag) => tag.trim());
-      query.tags = { $in: tagList.map((tag) => new RegExp(`^${tag}$`, "i")) };
+    if (tagsString) {
+      const tagList = validateTags(tagsString);
+      if (tagList.length > 0) {
+        query.tags = { $in: tagList.map((tag) => new RegExp(`^${tag}$`, "i")) };
+      }
     }
 
     const sortObj: any = {};
-    sortObj[sortBy] = sortOrder === "asc" ? 1 : -1;
+    sortObj[validatedSortBy] = validatedSortOrder === "asc" ? 1 : -1;
 
     const articles = await Article.find(query)
       .skip(skip)
@@ -103,16 +166,16 @@ router.get("/", async (req, res) => {
       },
       filters: {
         search,
-        tags,
+        tags: tagsString,
         category,
-        status,
+        status: validatedStatus,
         author,
-        sortBy,
-        sortOrder,
+        sortBy: validatedSortBy,
+        sortOrder: validatedSortOrder,
       },
     });
   } catch (error: any) {
-    console.log(error)
+    console.log(error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -121,15 +184,21 @@ router.get("/", async (req, res) => {
 router.get("/published", async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
     const skip = (page - 1) * limit;
 
-    const search = req.query.search as string;
-    const category = req.query.category as string;
+    const search = validateSearchInput(
+      req.query.search as string,
+      MAX_SEARCH_LENGTH
+    );
+    const category = validateSearchInput(
+      req.query.category as string,
+      MAX_CATEGORY_LENGTH
+    );
 
     let query: any = { status: "published" };
 
-    if (search) {
+    if (search && search.length > 0) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
         { content: { $regex: search, $options: "i" } },
@@ -137,7 +206,7 @@ router.get("/published", async (req, res) => {
       ];
     }
 
-    if (category) {
+    if (category && category.length > 0) {
       query.category = category;
     }
 
@@ -145,7 +214,7 @@ router.get("/published", async (req, res) => {
       .skip(skip)
       .limit(limit)
       .sort({ publishDate: -1 })
-      .select("-content"); // Don't send full content in list view
+      .select("-content");
 
     const totalArticles = await Article.countDocuments(query);
     const totalPages = Math.ceil(totalArticles / limit);
@@ -165,7 +234,6 @@ router.get("/published", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // READ - Get article by ID
 router.get("/:id", async (req, res) => {
   try {
@@ -273,7 +341,6 @@ router.patch("/:id/status", auth, async (req, res) => {
 router.delete("/:id", auth, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('hit')
 
     const deletedArticle = await Article.findByIdAndDelete(id);
 
@@ -329,15 +396,15 @@ router.post(
   async (req, res) => {
     try {
       const file = req.file as Express.MulterS3.File;
-      
+
       if (!file) {
         return res.status(400).json({ error: "No file uploaded" });
       }
 
-      res.status(200).json({ 
+      res.status(200).json({
         url: file.location,
         key: file.key,
-        type: file.mimetype
+        type: file.mimetype,
       });
     } catch (error: any) {
       res.status(400).json({ error: error.message });

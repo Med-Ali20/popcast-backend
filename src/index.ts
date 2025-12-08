@@ -1,11 +1,12 @@
 import express from "express";
 import { connectToDatabase } from "./db";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import podcastRouter from "./routes/podcast";
 import articleRouter from "./routes/article";
 import adminRouter from "./routes/admin";
-import categoryRouter from "./routes/category"
-import cron from 'node-cron'
+import categoryRouter from "./routes/category";
+import cron from 'node-cron';
 import Article from "./models/Article";
 
 require("dotenv").config();
@@ -18,11 +19,57 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
+
+// General rate limiter for all routes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: "Too many requests from this IP, please try again later."
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for certain IPs (optional)
+  // skip: (req) => {
+  //   const trustedIPs = ['127.0.0.1'];
+  //   return trustedIPs.includes(req.ip);
+  // }
+});
+
+// Stricter rate limiter for write operations (POST, PUT, DELETE)
+const writeOperationsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each IP to 30 write requests per windowMs
+  message: {
+    error: "Too many write requests, please try again later."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Very strict rate limiter for admin routes
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit each IP to 50 requests per windowMs
+  message: {
+    error: "Too many admin requests, please try again later."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply general rate limiter to all routes
+app.use(generalLimiter);
+
+// Apply specific rate limiters to routes
 app.use("/podcast", podcastRouter);
 app.use("/article", articleRouter);
-app.use("/admin", adminRouter);
 app.use("/category", categoryRouter);
+
+// Apply stricter rate limiter to admin routes
+app.use("/admin", adminLimiter, adminRouter);
 
 async function startServer() {
   try {

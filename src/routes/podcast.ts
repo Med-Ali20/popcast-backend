@@ -198,7 +198,6 @@ router.get("/", async (req, res) => {
 
 // Get single podcast by ID
 router.get("/:id", async (req, res) => {
-  console.log("Fetching podcast with ID:", req.params.id);
   try {
     const { id } = req.params;
     const podcast = await Podcast.findById(id);
@@ -253,7 +252,6 @@ router.patch("/:id", auth, async (req, res) => {
 
 // Delete podcast and remove files from S3
 router.delete("/:id", auth, async (req, res) => {
-  console.log('hi')
   try {
     const { id } = req.params;
 
