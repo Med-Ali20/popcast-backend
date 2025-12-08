@@ -41,10 +41,8 @@ app.use(blockMiddleware);
 
 // Honeypot routes - hidden routes that should never be accessed by legitimate users
 const honeypotRoutes = [
-  '/admin/login',
   '/wp-admin',
   '/wp-login.php',
-  '/.env',
   '/config.php',
   '/phpmyadmin',
   '/admin/config',
