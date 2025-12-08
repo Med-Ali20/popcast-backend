@@ -47,7 +47,6 @@ const honeypotRoutes = [
   '/.env',
   '/config.php',
   '/phpmyadmin',
-  '/.git/config',
   '/admin/config',
   '/backup.sql',
   '/database.sql'
