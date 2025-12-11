@@ -32,11 +32,11 @@ router.post(
         anghami,
         appleMusic,
       } = req.body;
-      
+
       const files = req.files as {
         [fieldname: string]: Express.MulterS3.File[];
       };
-      
+
       const audioFile = files?.audio?.[0];
       const videoFile = files?.video?.[0];
       const thumbnailFile = files?.thumbnail?.[0];
@@ -82,66 +82,134 @@ router.post(
 );
 
 // Upload only audio file to S3
-router.post("/upload-audio", auth, uploadAudio.single("audio"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file uploaded" });
+router.post(
+  "/upload-audio",
+  auth,
+  uploadAudio.single("audio"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file uploaded" });
+      }
+
+      const file = req.file as Express.MulterS3.File;
+
+      res.json({
+        message: "Audio uploaded successfully",
+        url: file.location,
+        key: file.key,
+        size: file.size,
+      });
+    } catch (error: any) {
+      console.error("Audio upload error:", error);
+      res.status(500).json({ error: "Failed to upload audio" });
     }
-
-    const file = req.file as Express.MulterS3.File;
-
-    res.json({
-      message: "Audio uploaded successfully",
-      url: file.location,
-      key: file.key,
-      size: file.size,
-    });
-  } catch (error: any) {
-    console.error("Audio upload error:", error);
-    res.status(500).json({ error: "Failed to upload audio" });
   }
-});
+);
 
 // Upload only video file to S3
-router.post("/upload-video", auth, uploadVideo.single("video"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No video file uploaded" });
+router.post(
+  "/upload-video",
+  auth,
+  uploadVideo.single("video"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No video file uploaded" });
+      }
+
+      const file = req.file as Express.MulterS3.File;
+
+      res.json({
+        message: "Video uploaded successfully",
+        url: file.location,
+        key: file.key,
+        size: file.size,
+      });
+    } catch (error: any) {
+      console.error("Video upload error:", error);
+      res.status(500).json({ error: "Failed to upload video" });
     }
-
-    const file = req.file as Express.MulterS3.File;
-
-    res.json({
-      message: "Video uploaded successfully",
-      url: file.location,
-      key: file.key,
-      size: file.size,
-    });
-  } catch (error: any) {
-    console.error("Video upload error:", error);
-    res.status(500).json({ error: "Failed to upload video" });
   }
-});
+);
 
-// Get all podcasts with pagination, search, and filters
+// Add these utility functions at the top of your file or in a separate utils file
+const MAX_SEARCH_LENGTH = 100;
+const MAX_TAG_LENGTH = 50;
+const MAX_CATEGORY_LENGTH = 50;
+
+// Validate and sanitize search input
+function validateSearchInput(input: string, maxLength: number): string {
+  if (!input) return "";
+
+  // Trim and limit length
+  let sanitized = input.trim().substring(0, maxLength);
+
+  // Remove potentially malicious characters
+  // Allow: letters, numbers, spaces, hyphens, underscores, and common punctuation
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\s\-_.,'!?@#]/g, "");
+
+  // Escape special regex characters that might remain
+  sanitized = sanitized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return sanitized;
+}
+
+// Validate tags array
+function validateTags(tagsString: string): string[] {
+  if (!tagsString) return [];
+
+  const tags = tagsString.split(",").map((tag) => tag.trim());
+
+  // Limit number of tags
+  const validTags = tags
+    .slice(0, 10) // Max 10 tags
+    .filter((tag) => tag.length > 0 && tag.length <= MAX_TAG_LENGTH)
+    .map((tag) => validateSearchInput(tag, MAX_TAG_LENGTH))
+    .filter((tag) => tag.length > 0);
+
+  return validTags;
+}
+
 router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 100); // Max 100 items per page
     const skip = (page - 1) * limit;
 
-    // Search and filter parameters
-    const search = req.query.search as string;
-    const tags = req.query.tags as string;
-    const category = req.query.category as string;
+    // Validate and sanitize inputs
+    const search = validateSearchInput(
+      req.query.search as string,
+      MAX_SEARCH_LENGTH
+    );
+    const tagsString = req.query.tags as string;
+    const category = validateSearchInput(
+      req.query.category as string,
+      MAX_CATEGORY_LENGTH
+    );
     const sortBy = (req.query.sortBy as string) || "createdAt";
     const sortOrder = (req.query.sortOrder as string) || "desc";
+
+    // Validate sortBy against allowed fields
+    const validSortFields = [
+      "createdAt",
+      "updatedAt",
+      "title",
+      "publishDate",
+      "duration",
+    ];
+    const validatedSortBy = validSortFields.includes(sortBy)
+      ? sortBy
+      : "createdAt";
+
+    // Validate sortOrder
+    const validatedSortOrder = sortOrder === "asc" ? "asc" : "desc";
 
     // Build query object
     let query: any = {};
 
     // General search across title, description, AND tags
-    if (search) {
+    if (search && search.length > 0) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
@@ -149,22 +217,25 @@ router.get("/", async (req, res) => {
       ];
     }
 
-    if (category) {
+    if (category && category.length > 0) {
       query.category = category;
     }
 
     // Additional tag filtering (exact matches only)
-    if (tags) {
-      const tagList = tags.split(",").map((tag) => tag.trim());
-      query.tags = { $in: tagList.map((tag) => new RegExp(`^${tag}$`, "i")) };
+    if (tagsString) {
+      const tagList = validateTags(tagsString);
+      if (tagList.length > 0) {
+        query.tags = { $in: tagList.map((tag) => new RegExp(`^${tag}$`, "i")) };
+      }
     }
 
     // Build sort object
     const sortObj: any = {};
-    sortObj[sortBy] = sortOrder === "asc" ? 1 : -1;
+    sortObj[validatedSortBy] = validatedSortOrder === "asc" ? 1 : -1;
 
     // Execute query with pagination
     const podcasts = await Podcast.find(query)
+      .populate('category', 'name') // Populate category with only name field
       .skip(skip)
       .limit(limit)
       .sort(sortObj);
@@ -185,10 +256,10 @@ router.get("/", async (req, res) => {
       },
       filters: {
         search,
-        tags,
+        tags: tagsString,
         category,
-        sortBy,
-        sortOrder,
+        sortBy: validatedSortBy,
+        sortOrder: validatedSortOrder,
       },
     });
   } catch (error: any) {
@@ -200,7 +271,8 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const podcast = await Podcast.findById(id);
+    const podcast = await Podcast.findById(id)
+      .populate('category', 'name'); // Populate category with only name field
 
     if (!podcast) {
       return res.status(404).json({ error: "Podcast not found" });
@@ -215,7 +287,6 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // PARTIAL UPDATE - Patch podcast by ID
 router.patch("/:id", auth, async (req, res) => {
   try {
