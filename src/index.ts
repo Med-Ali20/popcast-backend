@@ -76,7 +76,7 @@ honeypotRoutes.forEach(route => {
 // General rate limiter for all routes
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   message: {
     error: "Too many requests from this IP, please try again later."
   },
@@ -86,7 +86,7 @@ const generalLimiter = rateLimit({
 
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 5000,
   message: {
     error: "Too many admin requests, please try again later."
   },
