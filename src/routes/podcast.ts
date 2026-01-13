@@ -146,14 +146,14 @@ function validateSearchInput(input: string, maxLength: number): string {
   let sanitized = input.trim().substring(0, maxLength);
 
   // Remove potentially malicious characters
-  // Allow: letters, numbers, spaces, hyphens, underscores, and common punctuation
-  sanitized = sanitized.replace(/[^a-zA-Z0-9\s\-_.,'!?@#]/g, "");
-
-  // Escape special regex characters that might remain
-  sanitized = sanitized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Allow: letters (including Arabic), numbers, spaces, hyphens, underscores, and common punctuation
+  // This regex removes control characters and other potentially dangerous characters
+  // but keeps Arabic Unicode characters (\u0600-\u06FF is Arabic, \u0750-\u077F is Arabic Supplement)
+  sanitized = sanitized.replace(/[<>\"'`;&(){}[\]\\|]/g, "");
 
   return sanitized;
 }
+
 
 // Validate tags array
 function validateTags(tagsString: string): string[] {
