@@ -36,42 +36,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Apply block middleware to all routes
-app.use(blockMiddleware);
 
-// Honeypot routes - hidden routes that should never be accessed by legitimate users
-const honeypotRoutes = [
-  '/wp-admin',
-  '/wp-login.php',
-  '/config.php',
-  '/phpmyadmin',
-  '/admin/config',
-  '/backup.sql',
-  '/database.sql'
-];
-
-honeypotRoutes.forEach(route => {
-  app.all(route, (req, res) => {
-    const clientIP = req.ip || req.socket.remoteAddress || '';
-    
-    // Add IP to blocked list
-    blockedIPs.add(clientIP);
-    
-    // Log the attempt
-    console.log(`[SECURITY ALERT] IP ${clientIP} accessed honeypot route: ${route} at ${new Date().toISOString()}`);
-    console.log(`Request details:`, {
-      method: req.method,
-      headers: req.headers,
-      userAgent: req.get('user-agent')
-    });
-    
-    // Optionally save to database for persistence
-    // await saveBlockedIP(clientIP, route);
-    
-    // Return a fake response to not reveal it's a honeypot
-    res.status(404).json({ error: "Not found" });
-  });
-});
 
 // General rate limiter for all routes
 const generalLimiter = rateLimit({
